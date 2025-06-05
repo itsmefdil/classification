@@ -1,0 +1,42 @@
+TRAINING SUMMARY
+===============
+
+DATASET INFORMATION
+-------------------
+
+Total images used: 100
+
+Data Split:
+  • Training images: 80
+  • Testing images: 20
+  • Split ratio: 80.0% train, 20.0% test
+
+CONTENT ANALYSIS
+----------------
+
+Content Distribution:
+  • Images with bad words: 1 (1.0% of total)
+  • Clean images: 99 (99.0% of total)
+
+MODEL PERFORMANCE
+----------------
+
+Model  F1 Score  Accuracy         Loss
+  CNN       0.0       1.0 2.166794e-05
+  DNN       0.0       1.0 1.192093e-07
+  RNN       0.0       1.0 1.903658e-02
+
+BEST MODELS
+-----------
+
+• Best model by F1 Score: CNN (0.000)
+• Best model by Accuracy: CNN (1.000)
+• Best model by Loss: DNN (0.000)
+
+GENERATED FILES
+--------------
+
+• Model comparison chart: model_comparison.png
+• Results table: results_table.png
+• Content distribution chart: content_distribution.png
+• HTML report: training_report.html

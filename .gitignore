@@ -1,0 +1,11 @@
+__pycache__
+.venv/
+.python-version
+.DS_Store
+*.log
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+tiktok_images/
