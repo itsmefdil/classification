@@ -1,107 +1,148 @@
-# Image Classification with Text Detection
+# Image Classification Application
 
-This project performs image classification to detect inappropriate content in images using OCR (Optical Character Recognition) to extract text from images and identify bad words.
+This application performs image classification with text detection to identify images containing inappropriate content.
 
 ## Features
 
-- **Text Detection**: Uses OCR to extract text from images
-- **Content Classification**: Identifies images containing inappropriate words
-- **Multiple Models**: Compares CNN, DNN, and RNN model performance
-- **Duplicate Detection**: Identifies and removes duplicate or near-duplicate images
-- **Comprehensive Reporting**: Generates HTML reports, charts, and detailed logs
-- **Modular Architecture**: Well-organized code structure for maintainability
+- Image classification using multiple neural network architectures (CNN, DNN, RNN)
+- Text detection to identify images with bad words
+- Duplicate image detection and removal
+- Performance comparison of different models
+- Detailed HTML reports and visualizations
+- Support for CPU-only mode with AMD optimization
+- Configurable via environment variables or command-line arguments
 
 ## Requirements
 
-- Python 3.7+
-- Tesseract OCR
-- Dependencies listed in `requirements.txt`
+- Python 3.8+
+- TensorFlow 2.10+
+- Other dependencies listed in `requirements.txt`
 
 ## Installation
 
-1. Install Tesseract OCR:
-   - On macOS: `brew install tesseract`
-   - On Ubuntu/Debian: `sudo apt-get install tesseract-ocr`
-   - On Windows: Download from [Tesseract GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
+1. Clone this repository:
+```bash
+git clone <repository-url>
+cd classification
+```
 
-2. Install Python dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+2. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
 
-3. Prepare your dataset:
-   - Place images in the `data` directory
-   - Create a `bad_words.txt` file with one word per line
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Create a `.env` file (optional):
+```bash
+cp .env.example .env
+# Edit .env with your preferred settings
+```
 
 ## Usage
 
-Basic usage:
-```
-python app.py
-```
+### Basic Usage
 
-With options:
-```
-python app.py --image-dir /path/to/images --output-dir /path/to/output --limit 1000
+Run the application with default settings:
+
+```bash
+python main.py
 ```
 
-### Command Line Options
+### Command Line Arguments
 
-| Option | Description |
-|--------|-------------|
-| `--image-dir` | Directory containing images (default: from config) |
-| `--output-dir` | Directory for results (default: from config) |
-| `--limit` | Limit the number of images to process |
-| `--epochs` | Number of training epochs (default: 10) |
-| `--batch-size` | Batch size for training (default: 32) |
-| `--image-size` | Image size as height width (default: 224 224) |
-| `--no-report` | Skip generating HTML report |
-| `--keep-duplicates` | Keep duplicate images (don't remove them) |
-| `--duplicate-threshold` | Threshold for considering images as duplicates (0-10, lower is stricter) |
-| `--exact-duplicates-only` | Only remove exact duplicates |
+- `--limit`: Limit the number of images to process
+- `--image-dir`: Directory containing images (default: `tiktok_images`)
+- `--output-dir`: Directory for results
+- `--epochs`: Number of training epochs
+- `--batch-size`: Batch size for training
+- `--image-size`: Image size as height width (e.g., `--image-size 224 224`)
+- `--no-report`: Skip generating HTML report
+- `--keep-duplicates`: Keep duplicate images
+- `--duplicate-threshold`: Threshold for considering images as duplicates (0-10, lower is stricter)
+- `--exact-duplicates-only`: Only remove exact duplicates (same MD5 hash)
+- `--force-cpu`: Force CPU-only mode (no GPU)
+- `--cpu-threads`: Number of CPU threads to use (0 = auto-detect)
+- `--no-mixed-precision`: Disable mixed precision training
 
-### Duplicate Detection
+### Environment Variables
 
-The system can identify and remove duplicate or near-duplicate images to improve training efficiency:
-
-1. **Exact Duplicates**: Images with identical MD5 hashes
-2. **Near-Duplicates**: Visually similar images identified by perceptual hashing
-
-Duplicate detection can be configured with:
-- `--keep-duplicates`: Disable duplicate removal
-- `--duplicate-threshold`: Set sensitivity (0-10, lower is stricter)
-- `--exact-duplicates-only`: Only remove exact duplicates
-
-A detailed log of detected duplicates is saved to `duplicate_images.log` in the output directory.
-
-## Project Structure
+You can configure the application using environment variables in a `.env` file:
 
 ```
-.
-├── app.py                 # Main application entry point
-├── config.py              # Configuration settings
-├── requirements.txt       # Python dependencies
-├── data/                  # Directory for image data
-├── models/                # Model definitions
-│   ├── __init__.py
-│   └── model_factory.py   # Factory for creating models
-└── utils/                 # Utility modules
-    ├── __init__.py
-    ├── data_processing.py # Data loading and preprocessing
-    ├── reporting.py       # HTML report generation
-    ├── training.py        # Model training functions
-    └── visualization.py   # Chart generation
+# Image size for processing
+IMAGE_SIZE_HEIGHT=224
+IMAGE_SIZE_WIDTH=224
+
+# Training parameters
+BATCH_SIZE=32
+EPOCHS=10
+TEST_SIZE=0.2
+
+# Duplicate detection parameters
+REMOVE_DUPLICATES=true
+DUPLICATE_THRESHOLD=4
+EXACT_DUPLICATES_ONLY=false
+
+# Hardware acceleration settings
+FORCE_CPU=false
+CPU_THREADS=0
+USE_MIXED_PRECISION=true
 ```
+
+## CPU-Only Mode
+
+For systems without a GPU or when you want to use CPU only:
+
+```bash
+python main.py --force-cpu
+```
+
+This mode automatically:
+- Optimizes for AMD processors when detected
+- Reduces model complexity to improve performance
+- Adjusts batch sizes and thread counts for better CPU utilization
+- Uses GRU instead of LSTM for better performance on CPU
+
+For AMD processors, the application automatically enables AMD-specific optimizations.
 
 ## Output
 
-The system generates several output files:
-- HTML report with model performance and dataset analysis
-- Charts comparing model performance
-- Content distribution analysis
-- Duplicate image analysis
-- Detailed logs of the training process
+The application generates the following outputs in the specified output directory:
+
+- Training logs
+- Model performance comparison charts
+- Content distribution charts
+- Duplicate image analysis (if enabled)
+- Training history plots for each model
+- Saved models
+- HTML report with all results (if not disabled)
+
+## Examples
+
+Train with a smaller batch size and force CPU mode:
+```bash
+python main.py --batch-size 16 --force-cpu
+```
+
+Process only 100 images for testing:
+```bash
+python main.py --limit 100
+```
+
+Use a specific image directory and output directory:
+```bash
+python main.py --image-dir /path/to/images --output-dir ./results
+```
 
 ## License
 
-MIT License 
+[License Information]
+
+## Acknowledgements
+
+[Any acknowledgements] 

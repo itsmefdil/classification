@@ -10,6 +10,7 @@ import logging
 import config
 import os
 import matplotlib.pyplot as plt
+import time
 
 def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size, batch_size=32, epochs=10):
     """
@@ -27,6 +28,7 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     Returns:
         Dictionary with model performance metrics
     """
+    start_time = time.time()
     logging.info(f"Training {model_name} model...")
     
     # Convert labels to numpy array
@@ -40,6 +42,18 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     logging.info(f"Training set: {len(train_paths)} images")
     logging.info(f"Test set: {len(test_paths)} images")
     
+    # Optimize CPU operations if needed
+    if config.FORCE_CPU:
+        # Adjust batch size for CPU
+        batch_size = min(batch_size, 16)  # Smaller batches for CPU
+        logging.info(f"CPU-only mode: adjusted batch size to {batch_size}")
+        
+        # Enable parallel image processing but limit threads
+        num_parallel_calls = min(os.cpu_count() or 4, 4) if config.CPU_THREADS == 0 else config.CPU_THREADS
+        logging.info(f"Using {num_parallel_calls} parallel threads for data processing")
+    else:
+        num_parallel_calls = tf.data.AUTOTUNE
+    
     # Create TensorFlow datasets with data augmentation for training
     def preprocess_image(path):
         img = tf.io.read_file(path)
@@ -50,9 +64,11 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     
     def augment_image(image):
         # Apply random augmentations
+        # Reduce augmentation complexity on CPU to speed up processing
         image = tf.image.random_flip_left_right(image)
-        image = tf.image.random_brightness(image, max_delta=0.2)
-        image = tf.image.random_contrast(image, lower=0.8, upper=1.2)
+        if not config.FORCE_CPU:
+            image = tf.image.random_brightness(image, max_delta=0.2)
+            image = tf.image.random_contrast(image, lower=0.8, upper=1.2)
         return image
     
     def load_and_preprocess_train(path, label):
@@ -66,13 +82,13 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     
     # Create training dataset with augmentation
     train_ds = tf.data.Dataset.from_tensor_slices((train_paths, train_labels))
-    train_ds = train_ds.shuffle(len(train_paths))
-    train_ds = train_ds.map(load_and_preprocess_train, num_parallel_calls=tf.data.AUTOTUNE)
-    train_ds = train_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    train_ds = train_ds.shuffle(min(len(train_paths), 1000))  # Limit shuffle buffer size on CPU
+    train_ds = train_ds.map(load_and_preprocess_train, num_parallel_calls=num_parallel_calls)
+    train_ds = train_ds.batch(batch_size).prefetch(num_parallel_calls)
     
     # Create test dataset without augmentation
     test_ds = tf.data.Dataset.from_tensor_slices((test_paths, test_labels))
-    test_ds = test_ds.map(load_and_preprocess_test, num_parallel_calls=tf.data.AUTOTUNE)
+    test_ds = test_ds.map(load_and_preprocess_test, num_parallel_calls=num_parallel_calls)
     test_ds = test_ds.batch(batch_size)
     
     # Create and compile model
@@ -106,6 +122,11 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
         )
     ]
     
+    # Adjust epochs for CPU mode to reduce training time
+    if config.FORCE_CPU:
+        epochs = max(5, int(epochs * 0.7))  # Reduce epochs for CPU
+        logging.info(f"CPU-only mode: adjusted epochs to {epochs}")
+    
     # Train the model
     history = model.fit(
         train_ds,
@@ -115,8 +136,16 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
         verbose=1
     )
     
-    # Make predictions on test set
-    y_pred_probs = model.predict(test_ds)
+    # Make predictions on test set - use smaller batches for CPU
+    if config.FORCE_CPU and len(test_paths) > 100:
+        # Process in smaller batches for CPU to avoid memory issues
+        y_pred_probs = []
+        for batch_x, _ in test_ds:
+            batch_preds = model.predict(batch_x, verbose=0)
+            y_pred_probs.append(batch_preds)
+        y_pred_probs = np.vstack(y_pred_probs)
+    else:
+        y_pred_probs = model.predict(test_ds)
     
     # Convert probabilities to class predictions
     if y_pred_probs.shape[-1] > 1:  # Multi-class case
@@ -133,6 +162,9 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     # Get the final loss value
     loss = history.history['val_loss'][-1]
     
+    # Calculate training time
+    training_time = time.time() - start_time
+    
     # Log detailed results
     logging.info(f"{model_name} Results:")
     logging.info(f"  F1 Score: {f1:.4f}")
@@ -140,6 +172,7 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
     logging.info(f"  Precision: {precision:.4f}")
     logging.info(f"  Recall: {recall:.4f}")
     logging.info(f"  Loss: {loss:.4f}")
+    logging.info(f"  Training Time: {training_time:.2f} seconds")
     
     # Log classification report
     report = classification_report(test_labels, y_pred)
@@ -157,7 +190,8 @@ def train_and_evaluate(model_creator, model_name, file_paths, labels, image_size
         'Recall': recall,
         'Loss': loss,
         'Train Size': len(train_paths),
-        'Test Size': len(test_paths)
+        'Test Size': len(test_paths),
+        'Training Time': f"{training_time:.2f}s"
     }
 
 def plot_training_history(history, model_name, output_dir):

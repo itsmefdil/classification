@@ -41,6 +41,13 @@ def parse_arguments():
                         help='Threshold for considering images as duplicates (0-10, lower is stricter)')
     parser.add_argument('--exact-duplicates-only', action='store_true', default=config.EXACT_DUPLICATES_ONLY,
                         help='Only remove exact duplicates (same MD5 hash)')
+    # Add new CPU-related arguments
+    parser.add_argument('--force-cpu', action='store_true', default=config.FORCE_CPU,
+                        help='Force CPU-only mode (no GPU)')
+    parser.add_argument('--cpu-threads', type=int, default=config.CPU_THREADS,
+                        help='Number of CPU threads to use (0 = auto-detect)')
+    parser.add_argument('--no-mixed-precision', action='store_true',
+                        help='Disable mixed precision training')
     return parser.parse_args()
 
 def main():
@@ -54,12 +61,28 @@ def main():
         # Update LOG_FILE path as well
         config.LOG_FILE = os.path.join(config.OUTPUT_DIR, 'training.log')
     
+    # Update hardware acceleration settings
+    config.FORCE_CPU = args.force_cpu
+    config.CPU_THREADS = args.cpu_threads
+    config.USE_MIXED_PRECISION = not args.no_mixed_precision
+    
     # Create output directory and setup logging
     if not os.path.exists(config.OUTPUT_DIR):
         os.makedirs(config.OUTPUT_DIR)
         print(f"Created output directory: {config.OUTPUT_DIR}")
     
     setup_logging()
+    
+    # Log hardware settings
+    if config.FORCE_CPU:
+        logging.info(f"Running in CPU-only mode with {config.CPU_THREADS if config.CPU_THREADS > 0 else 'auto-detected'} threads")
+    else:
+        logging.info("GPU acceleration enabled")
+    
+    if config.USE_MIXED_PRECISION and not config.FORCE_CPU:
+        logging.info("Mixed precision enabled")
+    else:
+        logging.info("Mixed precision disabled")
     
     # Get image data with duplicate handling
     image_size = tuple(args.image_size)
@@ -193,44 +216,36 @@ def main():
     print("="*60)
     print(display_df.to_string(index=False))
     
+    # Print hardware settings
+    print("\n" + "="*60)
+    print("HARDWARE SETTINGS")
+    print("="*60)
+    print(f"CPU-only mode: {'Enabled' if config.FORCE_CPU else 'Disabled'}")
+    if config.FORCE_CPU:
+        print(f"CPU threads: {config.CPU_THREADS if config.CPU_THREADS > 0 else 'Auto-detected'}")
+    print(f"Mixed precision: {'Enabled' if config.USE_MIXED_PRECISION and not config.FORCE_CPU else 'Disabled'}")
+    
+    # Print training times if available
+    if 'Training Time' in df.columns:
+        print("\nTraining Times:")
+        for _, row in df.iterrows():
+            print(f"  - {row['Model']}: {row['Training Time']}")
+    
     # Print best model information
     best_f1_model = display_df.loc[display_df['F1 Score'].idxmax()]['Model']
     best_acc_model = display_df.loc[display_df['Accuracy'].idxmax()]['Model']
     best_prec_model = display_df.loc[display_df['Precision'].idxmax()]['Model']
     best_recall_model = display_df.loc[display_df['Recall'].idxmax()]['Model']
-    best_loss_model = display_df.loc[display_df['Loss'].idxmin()]['Model']
+    
+    print("\nBest performing models:")
+    print(f"  - Best F1 Score: {best_f1_model}")
+    print(f"  - Best Accuracy: {best_acc_model}")
+    print(f"  - Best Precision: {best_prec_model}")
+    print(f"  - Best Recall: {best_recall_model}")
     
     print("\n" + "="*60)
-    print("BEST MODELS")
-    print("="*60)
-    print(f"Best model by F1 Score: {best_f1_model} ({display_df['F1 Score'].max():.3f})")
-    print(f"Best model by Accuracy: {best_acc_model} ({display_df['Accuracy'].max():.3f})")
-    print(f"Best model by Precision: {best_prec_model} ({display_df['Precision'].max():.3f})")
-    print(f"Best model by Recall: {best_recall_model} ({display_df['Recall'].max():.3f})")
-    print(f"Best model by Loss: {best_loss_model} ({display_df['Loss'].min():.3f})")
-    
-    # Print output files
-    print("\n" + "="*60)
-    print("OUTPUT FILES")
-    print("="*60)
-    print(f"Output directory: {output_directory}")
-    print(f"Model comparison chart: {os.path.join(output_directory, 'model_comparison.png')}")
-    print(f"Results table: {os.path.join(output_directory, 'results_table.png')}")
-    print(f"Content distribution chart: {os.path.join(output_directory, 'content_distribution.png')}")
-    if duplicate_groups and remove_duplicates:
-        print(f"Duplicate analysis chart: {os.path.join(output_directory, 'duplicate_analysis.png')}")
-        print(f"Duplicate images log: {os.path.join(output_directory, 'duplicate_images.log')}")
-    print(f"Training summary: {os.path.join(output_directory, 'training_summary.txt')}")
-    # Add training history plots
-    print(f"CNN training history: {os.path.join(output_directory, 'CNN_training_history.png')}")
-    print(f"DNN training history: {os.path.join(output_directory, 'DNN_training_history.png')}")
-    print(f"RNN training history: {os.path.join(output_directory, 'RNN_training_history.png')}")
-    print(f"CNN model: {os.path.join(output_directory, 'CNN_best_model.keras')}")
-    print(f"DNN model: {os.path.join(output_directory, 'DNN_best_model.keras')}")
-    print(f"RNN model: {os.path.join(output_directory, 'RNN_best_model.keras')}")
-    if not args.no_report:
-        print(f"HTML report: {os.path.join(output_directory, 'training_report.html')}")
+    print(f"Results saved to: {args.output_dir}")
     print("="*60)
 
 if __name__ == "__main__":
-    main() 
+    main()
