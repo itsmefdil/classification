@@ -37,9 +37,22 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                          'bad_word_images' in content_stats and 
                          'clean_images' in content_stats)
     
+    # Check if we have duplicate information
+    has_duplicate_info = (content_stats is not None and 
+                          'duplicate_groups' in content_stats and 
+                          'duplicate_images' in content_stats)
+    
     if has_content_stats:
         bad_word_count = content_stats['bad_word_images']
         clean_count = content_stats['clean_images']
+    
+    # Calculate duplicate stats if available
+    if has_duplicate_info:
+        duplicate_count = content_stats['duplicate_images']
+        duplicate_groups = content_stats['duplicate_groups']
+        original_count = total_images + duplicate_count
+        duplicate_percent = (duplicate_count / original_count) * 100 if original_count > 0 else 0
+        unique_percent = 100 - duplicate_percent
     
     # Create HTML content
     html_content = f"""
@@ -195,6 +208,14 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                 color: #2980b9;
                 font-weight: bold;
             }}
+            .duplicate {{
+                color: #e67e22;
+                font-weight: bold;
+            }}
+            .unique {{
+                color: #27ae60;
+                font-weight: bold;
+            }}
             .progress-container {{
                 width: 100%;
                 background-color: #f1f1f1;
@@ -215,6 +236,12 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
             }}
             .progress-clean {{
                 background-color: #2980b9;
+            }}
+            .progress-duplicate {{
+                background-color: #e67e22;
+            }}
+            .progress-unique {{
+                background-color: #27ae60;
             }}
             .section {{
                 margin: 40px 0;
@@ -237,6 +264,43 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                 font-size: 1.2em;
                 font-weight: bold;
                 color: #2c3e50;
+            }}
+            .stat-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                gap: 20px;
+                margin: 20px 0;
+            }}
+            .stat-card {{
+                background-color: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                text-align: center;
+            }}
+            .stat-card h4 {{
+                margin: 0 0 10px 0;
+                color: #7f8c8d;
+                font-size: 0.9em;
+                text-transform: uppercase;
+            }}
+            .stat-card .value {{
+                font-size: 2em;
+                font-weight: bold;
+                color: #2c3e50;
+                margin: 10px 0;
+            }}
+            .stat-card .description {{
+                font-size: 0.9em;
+                color: #7f8c8d;
+            }}
+            .two-column {{
+                display: flex;
+                gap: 20px;
+                margin: 20px 0;
+            }}
+            .two-column > div {{
+                flex: 1;
             }}
         </style>
     </head>
@@ -266,6 +330,16 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                             <p><strong>Testing Images:</strong> <span class="stat-value">{test_size}</span> ({test_size/total_images:.1%})</p>
                         </div>
             """
+        
+        if has_duplicate_info:
+            html_content += f"""
+                        <div class="highlight-box">
+                            <h4>Deduplication:</h4>
+                            <p><strong>Original Images:</strong> <span class="stat-value">{original_count}</span></p>
+                            <p><strong>Duplicates Removed:</strong> <span class="stat-value">{duplicate_count}</span> ({duplicate_percent:.1f}%)</p>
+                            <p><strong>Duplicate Groups:</strong> <span class="stat-value">{duplicate_groups}</span></p>
+                        </div>
+            """
     else:
         html_content += "<p>No dataset information available</p>"
     
@@ -288,6 +362,58 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                 </div>
             </section>
     """
+    
+    # Add duplicate analysis section if available
+    if has_duplicate_info:
+        html_content += f"""
+            <section class="section">
+                <h2>Duplicate Image Analysis</h2>
+                <div class="two-column">
+                    <div>
+                        <p>
+                            The dataset was processed to identify and remove duplicate images. 
+                            A total of <span class="duplicate">{duplicate_count}</span> duplicate images were identified
+                            across <span class="duplicate">{duplicate_groups}</span> groups.
+                        </p>
+                        
+                        <div class="progress-container">
+                            <div class="progress-bar progress-unique" style="width: {unique_percent}%; float: left;">
+                                Unique: {unique_percent:.1f}%
+                            </div>
+                            <div class="progress-bar progress-duplicate" style="width: {duplicate_percent}%; float: left;">
+                                Duplicates: {duplicate_percent:.1f}%
+                            </div>
+                        </div>
+                        
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <h4>Original Dataset</h4>
+                                <div class="value">{original_count}</div>
+                                <div class="description">Total images before deduplication</div>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Unique Images</h4>
+                                <div class="value">{total_images}</div>
+                                <div class="description">Images kept for training</div>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Duplicates Removed</h4>
+                                <div class="value">{duplicate_count}</div>
+                                <div class="description">Redundant images removed</div>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Duplicate Groups</h4>
+                                <div class="value">{duplicate_groups}</div>
+                                <div class="description">Sets of similar images</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="content-stats-chart">
+                        <img src="duplicate_analysis.png" alt="Duplicate Analysis" style="max-width: 100%;">
+                    </div>
+                </div>
+            </section>
+        """
     
     # Add content analysis section if available
     if has_content_stats and total_images > 0:
@@ -325,6 +451,88 @@ def generate_html_report(results, output_dir=config.OUTPUT_DIR, total_images=Non
                 </div>
             </section>
         """
+    
+    # Add bad word images section if any were found
+    if has_content_stats and bad_word_count > 0:
+        bad_words_log_file = os.path.join(output_dir, 'bad_word_images.log')
+        if os.path.exists(bad_words_log_file):
+            html_content += f"""
+            <section class="section">
+                <h2>Images with Bad Words</h2>
+                <div class="summary-box">
+                    <h3>Bad Word Images Summary</h3>
+                """
+            
+            # Read and display information from the log file
+            try:
+                with open(bad_words_log_file, 'r') as f:
+                    lines = f.readlines()
+                    image_count = 0
+                    bad_words_found = set()
+                    image_paths = []
+                    
+                    current_image = None
+                    current_words = []
+                    current_text = ""
+                    
+                    for line in lines:
+                        if line.startswith('['):  # New image entry
+                            image_count += 1
+                            if "Image:" in line:
+                                current_image = line.split("Image:")[1].strip()
+                                image_paths.append(current_image)
+                        elif line.startswith('Found bad words:'):
+                            words = line.strip().replace('Found bad words: ', '').split(', ')
+                            current_words = words
+                            for word in words:
+                                bad_words_found.add(word)
+                        elif line.startswith('Extracted text:'):
+                            current_text = line.strip().replace('Extracted text: ', '')
+                    
+                    html_content += f"""
+                    <p><strong>Total images with bad words:</strong> {image_count}</p>
+                    """
+                    
+                    if bad_words_found:
+                        html_content += f"""
+                        <p><strong>Bad words detected:</strong> {', '.join(sorted(bad_words_found))}</p>
+                        """
+                    
+                    # Add a table with the first 10 images
+                    if image_paths:
+                        html_content += f"""
+                        <h4>First {min(10, len(image_paths))} Images with Bad Words</h4>
+                        <table>
+                            <tr>
+                                <th>Image Path</th>
+                            </tr>
+                        """
+                        
+                        for i, path in enumerate(image_paths[:10]):
+                            html_content += f"""
+                            <tr>
+                                <td>{path}</td>
+                            </tr>
+                            """
+                        
+                        html_content += """
+                        </table>
+                        """
+                        
+                        if len(image_paths) > 10:
+                            html_content += f"""
+                            <p><em>... and {len(image_paths) - 10} more images. See the log file for complete details.</em></p>
+                            """
+                    
+                    html_content += f"""
+                    <p>For complete details, see the log file: <code>{bad_words_log_file}</code></p>
+                    </div>
+                    """
+            except Exception as e:
+                html_content += f"""
+                <p>Error reading bad words log: {e}</p>
+                </div>
+                """
     
     html_content += """
             <section class="section">

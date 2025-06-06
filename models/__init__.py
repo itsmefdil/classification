@@ -1,1 +1,3 @@
-# Models package initialization 
+"""
+Models package for image classification
+""" 

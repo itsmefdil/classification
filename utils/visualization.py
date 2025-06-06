@@ -33,9 +33,15 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
         test_size = df['Test Size'].iloc[0]
         
         # Create a clean DataFrame for display (without train/test sizes)
-        display_df = df[['Model', 'F1 Score', 'Accuracy', 'Loss']].copy()
+        # Include Precision and Recall in the display DataFrame
+        display_df = df[['Model', 'F1 Score', 'Accuracy', 'Precision', 'Recall', 'Loss']].copy()
     else:
         display_df = df.copy()
+    
+    # Check if we have duplicate information
+    has_duplicate_info = (content_stats is not None and 
+                          'duplicate_groups' in content_stats and 
+                          'duplicate_images' in content_stats)
     
     # Set up the plotting style
     plt.style.use('default')
@@ -50,28 +56,24 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
         info_text = f'Total Images: {total_images}'
         if has_split_info:
             info_text += f' (Train: {train_size}, Test: {test_size})'
+        if has_duplicate_info:
+            info_text += f' | Duplicates Removed: {content_stats["duplicate_images"]}'
         fig.text(0.5, 0.96, info_text, ha='center', fontsize=12)
     
     # 1. Bar plot for all metrics
     ax1 = axes[0, 0]
-    metrics = ['F1 Score', 'Accuracy', 'Loss']
+    metrics = ['F1 Score', 'Accuracy', 'Precision', 'Recall']
     x = np.arange(len(display_df))
-    width = 0.25
+    width = 0.2  # Narrower bars to fit all metrics
     
     for i, metric in enumerate(metrics):
-        if metric == 'Loss':
-            # Invert loss for better visualization (lower is better)
-            values = 1 - display_df[metric]
-            label = f'{metric} (Inverted)'
-        else:
-            values = display_df[metric]
-            label = metric
-        ax1.bar(x + i*width, values, width, label=label)
+        values = display_df[metric]
+        ax1.bar(x + (i-1.5)*width, values, width, label=metric)
     
     ax1.set_xlabel('Models')
     ax1.set_ylabel('Score')
-    ax1.set_title('All Metrics Comparison')
-    ax1.set_xticks(x + width)
+    ax1.set_title('Performance Metrics Comparison')
+    ax1.set_xticks(x)
     ax1.set_xticklabels(display_df['Model'])
     ax1.legend()
     ax1.grid(True, alpha=0.3)
@@ -122,18 +124,40 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
             ax3.text(bar.get_x() + bar.get_width()/2., height + 0.01,
                     f'{height:.3f}', ha='center', va='bottom')
     
-    # 4. Loss comparison
+    # 4. Data composition or Loss comparison
     ax4 = axes[1, 1]
-    bars = ax4.bar(display_df['Model'], display_df['Loss'], color=['#FF7675', '#74B9FF', '#A29BFE'])
-    ax4.set_title('Loss Comparison (Lower is Better)')
-    ax4.set_ylabel('Loss')
-    ax4.grid(True, alpha=0.3)
     
-    # Add value labels on bars
-    for bar in bars:
-        height = bar.get_height()
-        ax4.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                f'{height:.3f}', ha='center', va='bottom')
+    # If we have duplicate info, show data composition
+    if has_duplicate_info:
+        # Create a pie chart showing original vs unique images
+        original_count = total_images + content_stats['duplicate_images']
+        duplicate_count = content_stats['duplicate_images']
+        
+        labels = ['Unique Images', 'Duplicate Images']
+        sizes = [total_images, duplicate_count]
+        colors = ['#2ecc71', '#e74c3c']
+        explode = (0, 0.1)  # explode the duplicates slice
+        
+        ax4.pie(sizes, explode=explode, labels=labels, colors=colors,
+               autopct='%1.1f%%', shadow=True, startangle=90)
+        ax4.axis('equal')
+        ax4.set_title('Image Deduplication Results')
+        
+        # Add count annotation
+        ax4.text(0, -1.2, f"Original dataset: {original_count} images", ha='center', fontsize=10)
+        ax4.text(0, -1.4, f"After deduplication: {total_images} images", ha='center', fontsize=10)
+    else:
+        # Show loss comparison
+        bars = ax4.bar(display_df['Model'], display_df['Loss'], color=['#FF7675', '#74B9FF', '#A29BFE'])
+        ax4.set_title('Loss Comparison (Lower is Better)')
+        ax4.set_ylabel('Loss')
+        ax4.grid(True, alpha=0.3)
+        
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                    f'{height:.3f}', ha='center', va='bottom')
     
     # Adjust layout and save
     plt.tight_layout()
@@ -155,14 +179,16 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
             row['Model'],
             f"{row['F1 Score']:.3f}",
             f"{row['Accuracy']:.3f}",
+            f"{row['Precision']:.3f}",
+            f"{row['Recall']:.3f}",
             f"{row['Loss']:.3f}"
         ])
     
     table = plt.table(cellText=table_data,
-                     colLabels=['Model', 'F1 Score', 'Accuracy', 'Loss'],
+                     colLabels=['Model', 'F1 Score', 'Accuracy', 'Precision', 'Recall', 'Loss'],
                      cellLoc='center',
                      loc='center',
-                     colColours=['#f0f0f0']*4)
+                     colColours=['#f0f0f0']*6)
     
     table.auto_set_font_size(False)
     table.set_fontsize(12)
@@ -170,7 +196,7 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
     
     # Style the table
     for i in range(len(display_df) + 1):
-        for j in range(4):
+        for j in range(6):
             cell = table[(i, j)]
             if i == 0:  # Header row
                 cell.set_text_props(weight='bold')
@@ -218,6 +244,35 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
             plt.savefig(content_path, dpi=300, bbox_inches='tight')
             logging.info(f"📊 Content distribution chart saved: {content_path}")
     
+    # Create a separate duplicate analysis chart if duplicate info available
+    if has_duplicate_info:
+        plt.figure(figsize=(10, 8))
+        
+        # Create a pie chart showing original vs unique images
+        original_count = total_images + content_stats['duplicate_images']
+        duplicate_count = content_stats['duplicate_images']
+        
+        labels = ['Unique Images', 'Duplicate Images']
+        sizes = [total_images, duplicate_count]
+        colors = ['#2ecc71', '#e74c3c']
+        explode = (0, 0.1)  # explode the duplicates slice
+        
+        plt.pie(sizes, explode=explode, labels=labels, colors=colors,
+               autopct='%1.1f%%', shadow=True, startangle=90)
+        plt.axis('equal')
+        plt.title('Image Deduplication Results', fontsize=16, fontweight='bold')
+        
+        # Add count annotation
+        plt.figtext(0.5, 0.01, 
+                   f"Original: {original_count} images, After deduplication: {total_images} images, " +
+                   f"Removed: {duplicate_count} duplicates in {content_stats['duplicate_groups']} groups", 
+                   ha='center', fontsize=12)
+        
+        # Save the duplicate analysis chart
+        duplicate_path = os.path.join(output_dir, 'duplicate_analysis.png')
+        plt.savefig(duplicate_path, dpi=300, bbox_inches='tight')
+        logging.info(f"📊 Duplicate analysis chart saved: {duplicate_path}")
+    
     # Create a text file with summary information
     summary_path = os.path.join(output_dir, 'training_summary.txt')
     with open(summary_path, 'w') as f:
@@ -236,6 +291,21 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
                 f.write(f"  • Training images: {train_size}\n")
                 f.write(f"  • Testing images: {test_size}\n")
                 f.write(f"  • Split ratio: {train_size/total_images:.1%} train, {test_size/total_images:.1%} test\n\n")
+        
+        # Duplicate Analysis Section
+        if has_duplicate_info:
+            original_count = total_images + content_stats['duplicate_images']
+            duplicate_count = content_stats['duplicate_images']
+            duplicate_groups = content_stats['duplicate_groups']
+            
+            f.write(f"DUPLICATE ANALYSIS\n")
+            f.write(f"-----------------\n\n")
+            f.write(f"Original dataset size: {original_count} images\n")
+            f.write(f"After deduplication: {total_images} images\n")
+            f.write(f"Duplicate images removed: {duplicate_count} ({duplicate_count/original_count:.1%} of original)\n")
+            f.write(f"Duplicate groups found: {duplicate_groups}\n")
+            f.write(f"Average duplicates per group: {duplicate_count/duplicate_groups:.1f}\n\n")
+            f.write(f"For details, see duplicate_images.log\n\n")
         
         # Content Analysis Section
         if content_stats and 'bad_word_images' in content_stats and 'clean_images' in content_stats:
@@ -267,6 +337,9 @@ def generate_results_png(results, output_dir=config.OUTPUT_DIR, total_images=Non
         f.write(f"• Results table: results_table.png\n")
         if content_stats and 'bad_word_images' in content_stats:
             f.write(f"• Content distribution chart: content_distribution.png\n")
+        if has_duplicate_info:
+            f.write(f"• Duplicate analysis chart: duplicate_analysis.png\n")
+            f.write(f"• Duplicate images log: duplicate_images.log\n")
         f.write(f"• HTML report: training_report.html\n")
     
     logging.info(f"📄 Training summary saved: {summary_path}")

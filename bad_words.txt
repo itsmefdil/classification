@@ -1,0 +1,10 @@
+profanity
+obscene
+explicit
+offensive
+vulgar
+inappropriate
+nsfw
+adult
+mature
+prohibited 
